@@ -11,6 +11,7 @@ const archiver = require('archiver');
       svgContents,
       toc
     }
+    const zipDir = `D:/电子书/Source/${category}`;
 
     fs.ensureDirSync(outputDir);
     try {
@@ -18,14 +19,15 @@ const archiver = require('archiver');
       await fs.writeFile(filePath, JSON.stringify(saveData), 'utf8')
 
       // 创建输出流
-      const output = fs.createWriteStream(`${outputDir}/${reTitle}.zip`);
+      fs.ensureDirSync(zipDir);
+      const output = fs.createWriteStream(`${zipDir}/${reTitle}.zip`);
       const archive = archiver('zip', {
         zlib: { level: 5 } // 最高压缩级别
       });
 
       // 监听事件
       output.on('close', () => {
-        console.log(`📄 压缩源数据完成: ${outputDir}/${reTitle}.zip `);
+        console.log(`📄 压缩源数据完成: ${zipDir}/${reTitle}.zip `);
         fs.unlinkSync(filePath);
       });
 

@@ -79,7 +79,7 @@ process.stdout.setEncoding('utf8');
     return chunks;
   }
 
-  async function splitGeneratePdf(splitUnit, buf, outputDir, title, fileName, toc) {
+  async function splitGeneratePdf(splitUnit, buf, outputDir, title, fileName, toc, tempDir) {
     const splitSize = Math.ceil(buf.length / Math.ceil(buf.length / splitUnit));
     const splitParts = chunkArray(buf, splitSize);
     console.error(`pdf toc length: ${buf.length}, Contents too loog, split to:${splitParts.length} parts`);
@@ -88,7 +88,7 @@ process.stdout.setEncoding('utf8');
     for (let i = 0; i < chunks.length; i++) {
       const subParts = chunks[i];
       const promises = subParts.map(async (chunk, index) => {
-        const pdfFileName = await browserGenPdf(chunk, outputDir, title, (i * 4) + index + 1);
+        const pdfFileName = await browserGenPdf(chunk, tempDir, title, (i * 4) + index + 1);
         if (pdfFileName && fs.existsSync(pdfFileName)) {
           mergeFileMap[(i * 4) + index] = pdfFileName;
         }
@@ -98,7 +98,7 @@ process.stdout.setEncoding('utf8');
     }
 
     if (Object.keys(mergeFileMap).length != splitParts.length) {
-      return await splitGeneratePdf(5, buf, outputDir, title, fileName, toc);
+      return await splitGeneratePdf(5, buf, outputDir, title, fileName, toc, tempDir);
     }
 
     let mergeFiles = [];
@@ -116,9 +116,11 @@ process.stdout.setEncoding('utf8');
   async function Svg2Pdf(outputDir, title, docName, svgContents, toc, enid, saveHis) {
     let buf = [];
     const filePreName = path.join(outputDir, title);
+    const tempDir = path.join(outputDir, '../../temp');
     const fileName = `${filePreName}.pdf`;
     try {
       fs.ensureDirSync(outputDir);
+      fs.ensureDirSync(tempDir);
 
       svgContents.forEach((svgContent, k) => {
         const [chapter, coverContent] = OneByOneHtml('pdf', k, svgContent, toc);
@@ -138,16 +140,16 @@ process.stdout.setEncoding('utf8');
 
       let result = false;
       if (buf.length <= 200) {
-        const pdfFileName = await browserGenPdf(buf, outputDir, title, null, false);
+        const pdfFileName = await browserGenPdf(buf, tempDir, title, null, false);
         if (pdfFileName && fs.existsSync(pdfFileName)) {
-          await loadAndGenerateOutline(pdfFileName, toc);
-          console.log('\x1b[32m%s\x1b[0m', `✅ created PDF: ${pdfFileName}`);
+          await loadAndGenerateOutline(pdfFileName, toc, outputDir, title);
+          console.log('\x1b[32m%s\x1b[0m', `✅ created PDF: ${path.join(outputDir, title + ".pdf")}`);
           result = true;
         } else {
-          result = await splitGeneratePdf(5, buf, outputDir, title, fileName, toc);
+          result = await splitGeneratePdf(5, buf, outputDir, title, fileName, toc, tempDir);
         }
       } else {
-        result = await splitGeneratePdf(200, buf, outputDir, title, fileName, toc);
+        result = await splitGeneratePdf(200, buf, outputDir, title, fileName, toc, tempDir);
       }
       // console.timeEnd(`PDF created in ${title}`)
       if (saveHis) {

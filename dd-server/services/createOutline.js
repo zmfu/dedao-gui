@@ -185,19 +185,21 @@ process.stdout.setEncoding('utf8');
     }
   }
 
-  async function loadAndGenerateOutline(filePath, toc) {
+  async function loadAndGenerateOutline(filePath, toc, outputDir, title) {
     const inputBytes = fs.readFileSync(filePath);
     const inputPdf = await PDFDocument.load(inputBytes);
-    const { hasError, missedKeys } = await generateOutline(inputPdf, filePath, toc);
+    const outputPath = path.join(outputDir, title + ".pdf");
+    const { hasError, missedKeys } = await generateOutline(inputPdf, outputPath, toc);
     if (hasError) {
-      fs.writeFileSync(filePath.replace(".pdf", ".bak.pdf"), inputBytes)
+      // fs.writeFileSync(filePath.replace(".pdf", ".bak.pdf"), inputBytes)
       const db = await connectDb();
       if (!db) {
         return;
       }
-      await db.run(`insert into download_data(enid, contents) values(?,?)`, [filePath, JSON.stringify(missedKeys)]);
+      await db.run(`insert into download_data(enid, contents) values(?,?)`, [outputPath, JSON.stringify(missedKeys)]);
       await db.close();
     }
+    fs.unlinkSync(filePath);
   }
 
   async function generateOutline(mergedPdf, outputPath, toc) {
