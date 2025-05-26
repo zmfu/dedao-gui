@@ -97,7 +97,7 @@ process.stdout.setEncoding('utf8');
       await Promise.all(promises);
     }
 
-    if (Object.keys(mergeFileMap).length != splitParts.length) {
+    if (Object.keys(mergeFileMap).length != splitParts.length && splitUnit != 5) {
       return await splitGeneratePdf(5, buf, outputDir, title, fileName, toc, tempDir);
     }
 

@@ -403,13 +403,13 @@ const htmlEscaper = require('html-escaper');
             if (id && lineStyle) {
               result += `<span id="${id}" style="${lineStyle}">`;
 
-              if (!id.startsWith('TOC.xhtml') && id && (eType == 'pdf' || eType == 'html')) {
+              if (id.startsWith && !id.startsWith('TOC.xhtml') && id && (eType == 'pdf' || eType == 'html')) {
                 result += `<div style='page-break-inside: avoid !important;height:1px;line-height: 1px;'><span class='toc-index'>[${id}]</span></div>`;
               }
             } else if (id) {
               result += `<span id="${id}">`;
 
-              if (!id.startsWith('TOC.xhtml') && id && (eType == 'pdf' || eType == 'html')) {
+              if (id.startsWith && !id.startsWith('TOC.xhtml') && id && (eType == 'pdf' || eType == 'html')) {
                 result += `<div style='page-break-inside: avoid !important;height:1px;line-height: 1px;'><span class='toc-index'>[${id}]</span></div>`;
               }
             } else if (lineStyle) {

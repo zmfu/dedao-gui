@@ -4,7 +4,8 @@ const path = require('path');
 const { open } = require('sqlite');
 const { createDecipheriv } = require('node:crypto');
 const { Buffer } = require('node:buffer');
-const { Svg2Pdf } = require('./services/svg2pdf');
+const { Svg2Pdf, PartSvg2Pdf } = require('./services/svg2pdf_1');
+const { mergePdfFiles } = require('./services/createOutline');
 const { saveSource } = require('./services/saveSource');
 
 let dbFilePath = path.join(__dirname, './ddinfo.db');
@@ -53,7 +54,7 @@ process.stdout.setEncoding('utf8');
 
   let enid = null;
   if (process.argv.length > 2) {
-    enid = process.argv[2]; 
+    enid = process.argv[2];
   } else {
     return;
   }
@@ -61,17 +62,20 @@ process.stdout.setEncoding('utf8');
   if (!enid) {
     return;
   }
-  // const enid = "vExPL6aYQPjadpoZxR5r6KDkbNJVO0o6k79w84GeXyLElm92gnMA1zvB7qMKpBGk";
+
   try {
-    let { category, outputFileName } = await downloadEbook(enid);
     db = await connectDb();
-    await db.run(
-      `update download_his set book_title = ?, category = ?, uploaded = ? where book_id = ?`,
-      [outputFileName, category, 0, enid]
-    );
+    const book = await db.get(`select * from download_his where book_id = ?`, [enid]);
     await db.close();
+
+    await downloadEbook(book);
+
+    if (process.send) {
+      process.send(enid);
+    }
   } catch (error) {
     console.error(error);
+    process.exit(-1);
   }
 
   function decryptAes(contents) {
@@ -125,6 +129,10 @@ process.stdout.setEncoding('utf8');
         }
       })
 
+      if (!ebookPages.data.c || !ebookPages.data.c.pages) {
+        return [];
+      }
+
       for (let i = 0; i < ebookPages.data.c.pages.length; i++) {
         const svContent = decryptAes(ebookPages.data.c.pages[i].svg)
         svgContents.push(svContent);
@@ -155,7 +163,8 @@ process.stdout.setEncoding('utf8');
     return chunks;
   }
 
-  async function downloadEbook(enid) {
+  async function downloadEbook(book) {
+    const enid = book.book_id;
     const readTokenRes = await axios(`${baseUrl}api/pc/ebook2/v1/pc/read/token?id=${enid}`, {
       method: 'POST',
       headers: {
@@ -169,25 +178,6 @@ process.stdout.setEncoding('utf8');
     })
     const readToken = readTokenRes.data.c.token;
 
-    const bookDetailRes = await axios(`${baseUrl}pc/ebook2/v1/pc/detail?id=${enid}`, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json, text/plain, */*',
-        "xi-csrf-token": result.csrfToken,
-        'Cookie': result.cookies,
-        "User-Agent": userAgent,
-        "sec-ch-ua": secChUa,
-        "sec-ch-ua-mobile": "?0"
-      }
-    })
-    const bookId = bookDetailRes.data.c.id;
-    const author = bookDetailRes.data.c.book_author;
-    const title = bookDetailRes.data.c.operating_title
-    let category = bookDetailRes.data.c.classify_name;
-    if (!category || category === '') {
-      category = '未分类'
-    }
-
     const bookDetailInfoRes = await axios(`${baseUrl}ebk_web/v1/get_book_info?token=${readToken}`, {
       method: 'GET',
       headers: {
@@ -199,6 +189,14 @@ process.stdout.setEncoding('utf8');
         "sec-ch-ua-mobile": "?0"
       }
     })
+
+    const bookId = book.dd_id;
+    const { author, title, category } = book;
+
+    if (!bookDetailInfoRes.data.c.bookInfo) {
+      console.log(`❌️ get book info failed: ${title}`);
+      return null;
+    }
     const orders = bookDetailInfoRes.data.c.bookInfo.orders;
     const toc = bookDetailInfoRes.data.c.bookInfo.toc;
 
@@ -207,8 +205,22 @@ process.stdout.setEncoding('utf8');
     const offset = 0;
     let svgContents = [];
     console.log(`⏳️ start download: [${category}]${title}_${author}`)
-    // console.time(`download: ${title} - ${author}`)
+
+    let outputDir = `D:/电子书/EBook/${category}`;
+    let outputSource = `${__dirname}/source/${category}`;
+    const outputFileName = `${bookId}_${title}`;
+    let reTitle = outputFileName.replace(/\//g, '_');
+    reTitle = reTitle.replace(/\\/g, '_');
+    reTitle = reTitle.replace(/\:/g, '_');
+    reTitle = reTitle.replace(/\*/g, '_');
+    reTitle = reTitle.replace(/\?/g, '_');
+    reTitle = reTitle.replace(/\"/g, '_');
+    reTitle = reTitle.replace(/\n/g, '');
+
     const chunks = chunkArray(orders, 5);
+    let splited = false;
+    let splitedIndex = 1;
+    let splitedFiles = [];
     for (const chunk of chunks) {
       const promises = chunk.map(async (order, i) => {
         const orderIndex = orders.indexOf(order);
@@ -231,26 +243,43 @@ process.stdout.setEncoding('utf8');
       });
 
       await Promise.all(promises);
+      if (svgContents.length > 200) {
+        svgContents = svgContents.sort((a, b) => {
+          return a.OrderIndex - b.OrderIndex;
+        })
+        console.log(`⏳️ generate PDF part-${splitedIndex}: [${category}]${outputFileName}, contentSize: ${svgContents.length}`);
+        splitedFiles.push(await PartSvg2Pdf(outputDir, reTitle, svgContents, splitedIndex, toc, enid, true));
+        saveSource(enid, outputSource, `${reTitle}-${splitedIndex}`, svgContents, [], category);
+        splited = true;
+        splitedIndex++;
+        svgContents = [];
+      }
     }
-    // console.timeEnd(`download: ${title} - ${author}`)
+
     svgContents = svgContents.sort((a, b) => {
       return a.OrderIndex - b.OrderIndex;
     })
 
-    const outputFileName = `${bookId}_${title}_${author}`;
-    let reTitle = outputFileName.replace(/\//g, '_');
-    reTitle = reTitle.replace(/\\/g, '_');
-    reTitle = reTitle.replace(/\:/g, '_');
-    reTitle = reTitle.replace(/\*/g, '_');
-    reTitle = reTitle.replace(/\?/g, '_');
-    reTitle = reTitle.replace(/\"/g, '_');
-    reTitle = reTitle.replace(/\n/g, '');
-
-    console.log(`⏳️ generate PDF: [${category}]${outputFileName}`)
-    let outputDir = `${__dirname}/output/${category}`;
-    let outputSource = `${__dirname}/source/${category}`;
-    saveSource(enid, outputSource, reTitle, svgContents, toc, category);
-    Svg2Pdf(outputDir, reTitle, title, svgContents, toc, enid, true);
+    if (splited) {
+      if (svgContents.length > 0) {
+        console.log(`⏳️ generate PDF part-${splitedIndex}: [${category}]${outputFileName}, contentSize: ${svgContents.length}`)
+        splitedFiles.push(await PartSvg2Pdf(outputDir, reTitle, svgContents, splitedIndex, toc, enid, true));
+      }
+      saveSource(enid, outputSource, reTitle, svgContents, toc, category);
+      const filePreName = path.join(outputDir, reTitle);
+      const fileName = `${filePreName}.pdf`;
+      await mergePdfFiles(splitedFiles, fileName, toc);
+      const db = await connectDb();
+      await db.run(
+        `update download_his set book_title = '${outputFileName}', uploaded = 1 where book_id = '${enid}'`
+      );
+      await db.close();
+      console.log('\x1b[32m%s\x1b[0m', `✅ merged PDF: ${fileName}`);
+    } else {
+      console.log(`⏳️ generate PDF: [${category}]${outputFileName}`)
+      saveSource(enid, outputSource, reTitle, svgContents, toc, category);
+      Svg2Pdf(outputDir, reTitle, svgContents, toc, enid, true);
+    }
     return { category, outputFileName };
   }
 })();

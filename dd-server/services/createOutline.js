@@ -222,6 +222,7 @@ process.stdout.setEncoding('utf8');
     let lastPageIndex = 0;
     let hasError = false;
     let missedKeys = [];
+    let skip = true;
     for (let i = 0; i < toc.length; i++) {
       const pageIndex = getPageIndex(pageDatas, toc[i].href, lastPageIndex);
       if (pageIndex == "notfound") {
@@ -230,6 +231,7 @@ process.stdout.setEncoding('utf8');
         missedKeys.push(toc[i].href);
         continue;
       }
+      skip = false;
       lastPageIndex = pageIndex;
       const pageRef = mergedPdf.getPage(pageIndex).ref;
       const destArray = PDFArray.withContext(mergedPdf.context);
@@ -242,6 +244,10 @@ process.stdout.setEncoding('utf8');
 
       toc[i].bookmark = bookmark;
       toc[i].ref = ref;
+    }
+
+    if (skip) {
+      return;
     }
 
     // 构建目录树
