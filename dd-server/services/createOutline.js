@@ -264,37 +264,6 @@ process.stdout.setEncoding('utf8');
 
     fs.writeFileSync(outputPath, mergedPdfBytes);
 
-    // let zipPath = outputPath.replace(".pdf", ".zip");
-
-    // const output = fs.createWriteStream(zipPath);
-    // const archive = archiver('zip', {
-    //   zlib: { level: 5 } // 最高压缩级别
-    // });
-
-    // // 监听事件
-    // output.on('close', () => {
-    //   console.log(`📄 压缩PDF: ${zipPath} `);
-    //   fs.unlinkSync(outputPath);
-    // });
-
-    // archive.on('warning', (err) => {
-    //   if (err.code === 'ENOENT') console.warn('文件不存在警告:', err);
-    //   else throw err;
-    // });
-
-    // archive.on('error', (err) => {
-    //   throw err;
-    // });
-
-    // // 管道连接
-    // archive.pipe(output);
-
-    // archive.file(outputPath, { name: path.basename(outputPath) });
-
-    // // 完成压缩
-    // archive.finalize().then(() => {
-    // });
-
     return { hasError, missedKeys };
   }
 
