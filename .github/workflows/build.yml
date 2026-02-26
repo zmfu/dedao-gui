@@ -1,82 +1,59 @@
-name: Build Windows EXE
+name: Build Windows EXE (Final Attempt)
 
 on:
-  push:
-    branches: [ "main", "master" ]
-  workflow_dispatch:
+  workflow_dispatch: # 只保留手动触发
 
 jobs:
   build:
     runs-on: windows-latest
 
     steps:
-      # 1. 下载代码
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2. 安装 Node.js 20
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      # 3. 【关键】安装 Visual Studio C++ 构建工具和 Windows SDK
-      # 使用 chocolatey 或直接调用 vs_installer 来确保组件存在
-      - name: Install VS Build Tools and Windows SDK
-        run: |
-          # 查找 VS Installer
-          $installerPath = "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vs_installer.exe"
-          if (Test-Path $installerPath) {
-            Write-Host "Modifying Visual Studio installation..."
-            # 添加 Desktop development with C++ 和 Windows 10/11 SDK
-            & $installerPath modify --installPath "C:\Program Files\Microsoft Visual Studio\2022\Enterprise" `
-              --add Microsoft.VisualStudio.Workload.NativeDesktop `
-              --add Microsoft.VisualStudio.Component.Windows10SDK.22000 `
-              --includeRecommended `
-              --quiet `
-              --wait
-          } else {
-            Write-Host "VS Installer not found, hoping for the best..."
-          }
-        shell: pwsh
+      # 1. 第一次激活环境 (用于 npm install)
+      - name: Setup MSVC for Install
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
 
-      # 4. 安装依赖
       - name: Install Dependencies
         run: |
           cd dd-server
           npm config set registry https://registry.npmmirror.com
           npm install
-          
           cd ../dd-vue
           npm config set registry https://registry.npmmirror.com
           npm install
-        shell: pwsh
 
-      # 5. 构建前端
       - name: Build Frontend
         run: |
           cd dd-vue
           npm run build
           cp -r dist/* ../dd-server/
-        shell: pwsh
 
-      # 6. 打包 Electron (关键：设置环境变量告诉 node-gyp 用哪个 VS)
+      # 2. 【关键】第二次激活环境 (用于 electron-builder 内部的子进程)
+      # 这一步非常重要，因为 electron-builder 会 spawn 新进程
+      - name: Setup MSVC for Build
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
       - name: Build Electron App
         run: |
           cd dd-server
-          # 1. 确保 electron-builder 安装在本地 node_modules 中
-          npm install --no-save electron-builder
-          
-          # 2. 运行前端构建 (虽然上一步可能做了，但再跑一次保险，且路径相对)
-          npm run vue:build
-          
-          # 3. 使用 npx 调用 electron-builder (这是关键！)
-          npx electron-builder --windows
+          # 尝试加上 --skip-npm-rebuild 参数
+          npx electron-builder --windows --skip-npm-rebuild
         shell: pwsh
 
-      # 7. 上传产物
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: dd-client-installer
+          name: dd-client-installer-win64
           path: dd-server/dist/*.exe
+          if-no-files-found: error
