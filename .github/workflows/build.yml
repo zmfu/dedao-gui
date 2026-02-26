@@ -20,35 +20,56 @@ jobs:
         with:
           node-version: '20'
 
-      # 3. 【新增】配置 Visual Studio 环境
-      # 告诉 node-gyp 使用已安装的 VS 2022，并设置必要的变量
-      - name: Setup MSBuild
-        uses: microsoft/setup-msbuild@v2
+      # 3. 【关键】安装 Visual Studio C++ 构建工具和 Windows SDK
+      # 使用 chocolatey 或直接调用 vs_installer 来确保组件存在
+      - name: Install VS Build Tools and Windows SDK
+        run: |
+          # 查找 VS Installer
+          $installerPath = "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vs_installer.exe"
+          if (Test-Path $installerPath) {
+            Write-Host "Modifying Visual Studio installation..."
+            # 添加 Desktop development with C++ 和 Windows 10/11 SDK
+            & $installerPath modify --installPath "C:\Program Files\Microsoft Visual Studio\2022\Enterprise" `
+              --add Microsoft.VisualStudio.Workload.NativeDesktop `
+              --add Microsoft.VisualStudio.Component.Windows10SDK.22000 `
+              --includeRecommended `
+              --quiet `
+              --wait
+          } else {
+            Write-Host "VS Installer not found, hoping for the best..."
+          }
+        shell: pwsh
 
-      # 4. 安装依赖 (此时环境已准备好，sqlite3 应该能编译)
+      # 4. 安装依赖
       - name: Install Dependencies
         run: |
           cd dd-server
-          # 设置 npm 使用镜像加速
           npm config set registry https://registry.npmmirror.com
           npm install
           
           cd ../dd-vue
           npm config set registry https://registry.npmmirror.com
           npm install
+        shell: pwsh
 
-      # 5. 构建前端 (Vue)
+      # 5. 构建前端
       - name: Build Frontend
         run: |
           cd dd-vue
           npm run build
           cp -r dist/* ../dd-server/
+        shell: pwsh
 
-      # 6. 打包 Electron
+      # 6. 打包 Electron (关键：设置环境变量告诉 node-gyp 用哪个 VS)
       - name: Build Electron App
         run: |
           cd dd-server
+          # 显式设置 VS 路径，防止 node-gyp 迷路
+          $env:GYP_MSVS_VERSION = "2022"
+          $env:VCToolsRedistDir = "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Redist\MSVC\14.38.33135\x64" 
+          # 运行打包
           npm run dist:win
+        shell: pwsh
 
       # 7. 上传产物
       - name: Upload Artifact
