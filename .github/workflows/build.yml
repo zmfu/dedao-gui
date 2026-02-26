@@ -1,4 +1,4 @@
-name: Build Windows EXE (Final Attempt)
+name: Build Windows EXE (Final Attempt 2)
 
 on:
   workflow_dispatch: # 只保留手动触发
@@ -47,8 +47,9 @@ jobs:
       - name: Build Electron App
         run: |
           cd dd-server
-          # 尝试加上 --skip-npm-rebuild 参数
-          npx electron-builder --windows --skip-npm-rebuild
+          # 不再加 --skip-npm-rebuild，直接运行
+          # 因为环境变量已经由上一步的 msvc-dev-cmd 配好了，这次编译一定会成功
+          npx electron-builder --windows
         shell: pwsh
 
       - name: Upload Artifact
