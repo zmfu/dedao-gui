@@ -64,11 +64,14 @@ jobs:
       - name: Build Electron App
         run: |
           cd dd-server
-          # 显式设置 VS 路径，防止 node-gyp 迷路
-          $env:GYP_MSVS_VERSION = "2022"
-          $env:VCToolsRedistDir = "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Redist\MSVC\14.38.33135\x64" 
-          # 运行打包
-          npm run dist:win
+          # 1. 确保 electron-builder 安装在本地 node_modules 中
+          npm install --no-save electron-builder
+          
+          # 2. 运行前端构建 (虽然上一步可能做了，但再跑一次保险，且路径相对)
+          npm run vue:build
+          
+          # 3. 使用 npx 调用 electron-builder (这是关键！)
+          npx electron-builder --windows
         shell: pwsh
 
       # 7. 上传产物
