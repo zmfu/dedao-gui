@@ -1,0 +1,51 @@
+name: Build Windows EXE
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch: # 允许手动在网页点击触发
+
+jobs:
+  build:
+    runs-on: windows-latest # 使用 Windows 服务器
+
+    steps:
+      # 1. 下载代码
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 2. 安装 Node.js 20
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # 3. 安装依赖 (云端自动有 VS，sqlite3 会自动编译成功)
+      - name: Install Dependencies
+        run: |
+          cd dd-server
+          npm install
+          cd ../dd-vue
+          npm install
+
+      # 4. 构建前端 (Vue)
+      - name: Build Frontend
+        run: |
+          cd dd-vue
+          npm run build
+          # 将构建产物复制到 server 目录
+          cp -r dist/* ../dd-server/
+
+      # 5. 打包 Electron (生成 .exe)
+      - name: Build Electron App
+        run: |
+          cd dd-server
+          npm run dist:win
+
+      # 6. 上传生成的 exe 文件
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dd-client-installer
+          path: dd-server/dist/*.exe
+          # 如果 exe 在根目录 dist，请改为 path: dist/*.exe
