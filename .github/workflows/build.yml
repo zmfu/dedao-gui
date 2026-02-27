@@ -1,4 +1,4 @@
-name: Build Windows EXE (Final Attempt 2)
+name: Build Windows EXE (Final Attempt 5)
 
 on:
   workflow_dispatch: # 只保留手动触发
@@ -48,7 +48,7 @@ jobs:
         run: |
           cd dd-server
           # 因为环境变量已经由上一步的 msvc-dev-cmd 配好了，这次编译一定会成功
-          npx electron-builder --windows -c.npmRebuild=false
+          npx electron-builder --windows --config.npmRebuild=false
         shell: pwsh
 
       - name: Upload Artifact
