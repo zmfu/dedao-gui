@@ -47,9 +47,8 @@ jobs:
       - name: Build Electron App
         run: |
           cd dd-server
-          # 不再加 --skip-npm-rebuild，直接运行
           # 因为环境变量已经由上一步的 msvc-dev-cmd 配好了，这次编译一定会成功
-          npx electron-builder --windows
+          npx electron-builder --windows -c.npmRebuild=false
         shell: pwsh
 
       - name: Upload Artifact
