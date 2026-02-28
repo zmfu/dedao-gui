@@ -44,3 +44,4 @@ sudo npm run dist:macarm 或 sudo npm run dist:macx64
 <img width="1489" alt="image" src="https://github.com/user-attachments/assets/67d47e67-341c-4eb6-9770-53c22e779166" />
 5.列表形式展示书架
 <img width="1489" alt="截屏2025-05-03 10 57 29" src="https://github.com/user-attachments/assets/055ea3ba-6602-48ef-9890-6c856c1702e5" />
+# Test Cache Hit
