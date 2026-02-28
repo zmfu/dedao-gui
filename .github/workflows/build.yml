@@ -24,23 +24,46 @@ jobs:
         with:
           arch: x64
 
-      # 👇 修正版：调试步骤 (使用 PowerShell 语法)
-      - name: Debug Cache Status
-        shell: pwsh # 显式指定使用 PowerShell
+      # 👇【新增】打印即将使用的 Cache Key
+      - name: Debug Cache Key
+        shell: pwsh
         run: |
-          Write-Host "Cache Hit Status: ${{ steps.cache-node-modules.outputs.cache-hit }}"
-          Write-Host "Node Modules Size Check:"
-          
-          if (Test-Path "node_modules") {
-            $size = (Get-ChildItem "node_modules" -Recurse | Measure-Object -Property Length -Sum).Sum / 1MB
-            Write-Host "node_modules size: $($size.ToString('F2')) MB"
-            Get-ChildItem "node_modules" | Select-Object -First 5 Name
+          $lockHash = "${{ hashFiles('**/package-lock.json') }}"
+          $fullKey = "Windows-npm-$lockHash"
+          Write-Host "🔑 Calculated Cache Key: $fullKey"
+          Write-Host "📄 Lock files found:"
+          Get-ChildItem -Recurse -Filter "package-lock.json" | ForEach-Object { Write-Host "  - $($_.FullName)" }
+
+      # 1. 缓存步骤
+      - name: Cache Node Modules
+        id: cache-node-modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            dd-server/node_modules
+            dd-vue/node_modules
+            ~/.npm
+          # 👇 显式写出 OS 名称，避免 runner.os 潜在的大小写问题
+          key: Windows-npm-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            Windows-npm-
+
+      # 2. 调试步骤 (增强版)
+      - name: Debug Cache Hit
+        shell: pwsh
+        run: |
+          $hit = "${{ steps.cache-node-modules.outputs.cache-hit }}"
+          if ($hit -eq "true") {
+            Write-Host "✅ CACHE HIT!"
+          } elseif ($hit -eq "false") {
+            Write-Host "❌ CACHE MISS (Found old cache but key mismatch)"
           } else {
-            Write-Host "node_modules directory does not exist yet."
+            Write-Host "⚠️ CACHE MISS (No cache found at all) - Status: '$hit'"
           }
           
-          Write-Host "Memory Info (SystemInfo):"
-          systeminfo | findstr /C:"Total Physical Memory" /C:"Available Physical Memory"
+          Write-Host "📂 Checking node_modules existence:"
+          if (Test-Path "dd-server/node_modules") { Write-Host "  ✅ dd-server/node_modules exists" } else { Write-Host "  ❌ dd-server/node_modules MISSING" }
+          if (Test-Path "dd-vue/node_modules") { Write-Host "  ✅ dd-vue/node_modules exists" } else { Write-Host "  ❌ dd-vue/node_modules MISSING" }
 
       - name: Install Dependencies
         shell: pwsh # 显式指定使用 PowerShell
