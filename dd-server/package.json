@@ -1,0 +1,79 @@
+{
+    "name": "dd-client",
+    "version": "1.0.0",
+    "description": "得到电子书",
+    "main": "main.js",
+    "scripts": {
+        "vue:build": "cd ../dd-vue && npm run build",
+        "dev": "node server.js",
+        "start": "npx electron .",
+        "dist:win": "npm run vue:build && electron-builder --windows",
+        "dist:macx64": "npm run vue:build && electron-builder --mac --x64",
+        "dist:macarm": "npm run vue:build && electron-builder --mac --arm64"
+    },
+    "author": "",
+    "license": "ISC",
+    "dependencies": {
+        "archiver": "^7.0.1",
+        "axios": "^1.9.0",
+        "child_process": "^1.0.2",
+        "cookie": "^1.0.2",
+        "epub-gen": "^0.1.0",
+        "express": "^4.18.2",
+        "fs-extra": "^11.3.0",
+        "html-escaper": "^3.0.3",
+        "path": "^0.12.7",
+        "pdf-lib": "^1.17.1",
+        "pdfjs-dist": "^2.6.347",
+        "puppeteer": "^24.7.2",
+        "sqlite": "^5.1.1",
+        "sqlite3": "^5.1.7",
+        "svg-parser": "^2.0.4"
+    },
+    "devDependencies": {
+        "electron": "^26.2.3",
+        "electron-builder": "^23.6.0"
+    },
+    "build": {
+        "appId": "com.example.dd-client",
+        "productName": "得到电子书",
+        "defaultArch": "x64",
+        "win": {
+            "target": [
+                "nsis"
+            ],
+            "icon": "./icon256.ico"
+        },
+        "nsis": {
+            "oneClick": false,
+            "allowToChangeInstallationDirectory": true,
+            "artifactName": "ddclient_installer_${version}.${ext}"
+        },
+        "mac": {
+            "target": [
+                "dmg"
+            ],
+            "x64ArchFiles": true,
+            "category": "public.app-category.productivity",
+            "icon": "./icon512.png"
+        },
+        "files": [
+            "main.js",
+            "preload.js",
+            "custom.js",
+            "cookie.js",
+            "server.js",
+            "services/*",
+            "services/**/*",
+            {
+                "from": "../dd-vue/dist",
+                "filter": [
+                    "**/*.js",
+                    "**/*.css",
+                    "*.html",
+                    "*.ico"
+                ]
+            }
+        ]
+    }
+}

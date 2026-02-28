@@ -1,0 +1,17 @@
+node_modules
+dist
+*.log
+*.zip
+*.tar.gz
+.DS_Store
+*.db
+.vscode
+log.txt
+source/
+output/
+output_html/
+dd-server/assets
+dd-server/*.html
+dd-server/favicon.ico
+# dd-server/test.js
+# package-lock.json

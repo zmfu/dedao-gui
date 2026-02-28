@@ -1,0 +1,138 @@
+name: Build Windows EXE (Cache Attempt)
+
+on:
+  workflow_dispatch: # 只保留手动触发
+  push:              
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # 1. 第一次激活环境 (用于 npm install)
+      - name: Setup MSVC for Install
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      # 👇【新增】打印即将使用的 Cache Key
+      - name: Debug Cache Key
+        shell: pwsh
+        run: |
+          $lockHash = "${{ hashFiles('**/package-lock.json') }}"
+          $fullKey = "Windows-npm-$lockHash"
+          Write-Host "🔑 Calculated Cache Key: $fullKey"
+          Write-Host "📄 Lock files found:"
+          Get-ChildItem -Recurse -Filter "package-lock.json" | ForEach-Object { Write-Host "  - $($_.FullName)" }
+
+      # 1. 缓存步骤
+      - name: Cache Node Modules
+        id: cache-node-modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            dd-server/node_modules
+            dd-vue/node_modules
+            ~/.npm
+          # 👇 显式写出 OS 名称，避免 runner.os 潜在的大小写问题
+          key: Windows-npm-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            Windows-npm-
+
+      # 2. 调试步骤 (增强版)
+      - name: Debug Cache Hit
+        shell: pwsh
+        run: |
+          $hit = "${{ steps.cache-node-modules.outputs.cache-hit }}"
+          if ($hit -eq "true") {
+            Write-Host "✅ CACHE HIT!"
+          } elseif ($hit -eq "false") {
+            Write-Host "❌ CACHE MISS (Found old cache but key mismatch)"
+          } else {
+            Write-Host "⚠️ CACHE MISS (No cache found at all) - Status: '$hit'"
+          }
+          
+          Write-Host "📂 Checking node_modules existence:"
+          if (Test-Path "dd-server/node_modules") { Write-Host "  ✅ dd-server/node_modules exists" } else { Write-Host "  ❌ dd-server/node_modules MISSING" }
+          if (Test-Path "dd-vue/node_modules") { Write-Host "  ✅ dd-vue/node_modules exists" } else { Write-Host "  ❌ dd-vue/node_modules MISSING" }
+
+      - name: Install Dependencies
+        shell: pwsh # 显式指定使用 PowerShell
+        run: |
+          Write-Host "Starting npm ci..."
+          
+          # PowerShell 查看内存 (单位 MB)
+          $mem = Get-CimInstance Win32_OperatingSystem
+          Write-Host "Free Physical Memory: $($mem.FreePhysicalMemory / 1MB) MB"
+          
+          # --- 修改开始：分别进入子目录执行 ---
+          
+          # 1. 处理 dd-server
+          Write-Host "👉 Installing dependencies for dd-server..."
+          Set-Location dd-server
+          npm config set registry https://registry.npmmirror.com
+          npm ci --loglevel verbose --progress=false --prefer-offline
+          Set-Location .. # 返回根目录
+          
+          # 2. 处理 dd-vue
+          Write-Host "👉 Installing dependencies for dd-vue..."
+          Set-Location dd-vue
+          npm config set registry https://registry.npmmirror.com
+          npm ci --loglevel verbose --progress=false --prefer-offline
+          Set-Location .. # 返回根目录
+          
+          # --- 修改结束 ---
+          
+          Write-Host "✅ All dependencies installed successfully."
+        if: steps.cache-node-modules.outputs.cache-hit != 'true'
+        env:
+          NODE_OPTIONS: "--max-old-space-size=4096"
+          
+      - name: Build Frontend (Vue/Vite)
+        shell: pwsh
+        run: |
+          Write-Host "🏗️ Building frontend project..."
+          Set-Location dd-vue
+          npm config set registry https://registry.npmmirror.com
+          # 运行构建命令，生成 dist/ 目录
+          npm run build 
+          Set-Location ..
+          
+          Write-Host "✅ Frontend build completed."
+          Write-Host "📂 Verifying dist folder:"
+          if (Test-Path "dd-vue/dist/index.html") {
+            Write-Host "  ✅ dd-vue/dist/index.html found!"
+          } else {
+            Write-Host "  ❌ ERROR: dist/index.html NOT found!"
+            exit 1 # 如果没生成，直接让构建失败，避免打包空壳
+          }          
+
+      # 2. 【关键】第二次激活环境 (用于 electron-builder 内部的子进程)
+      # 这一步非常重要，因为 electron-builder 会 spawn 新进程
+      - name: Setup MSVC for Build
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Build Electron App
+        run: |
+          cd dd-server
+          # 因为环境变量已经由上一步的 msvc-dev-cmd 配好了，这次编译一定会成功
+          npx electron-builder --windows --config.npmRebuild=false
+        shell: pwsh
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dd-client-installer-win64
+          path: dd-server/dist/*.exe
+          if-no-files-found: error
