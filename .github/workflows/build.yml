@@ -24,29 +24,42 @@ jobs:
         with:
           arch: x64
 
-      - name: Cache Node Modules
-        id: cache-node-modules
-        uses: actions/cache@v4
-        with:
-          path: |
-            **/node_modules
-            ~/.npm
-            # 如果有全局安装的 electron-builder 等，也可以缓存
-            ~/.cache/electron
-            ~/.cache/electron-builder
-          key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-npm-
+      # 👇 修正版：调试步骤 (使用 PowerShell 语法)
+      - name: Debug Cache Status
+        shell: pwsh # 显式指定使用 PowerShell
+        run: |
+          Write-Host "Cache Hit Status: ${{ steps.cache-node-modules.outputs.cache-hit }}"
+          Write-Host "Node Modules Size Check:"
+          
+          if (Test-Path "node_modules") {
+            $size = (Get-ChildItem "node_modules" -Recurse | Measure-Object -Property Length -Sum).Sum / 1MB
+            Write-Host "node_modules size: $($size.ToString('F2')) MB"
+            Get-ChildItem "node_modules" | Select-Object -First 5 Name
+          } else {
+            Write-Host "node_modules directory does not exist yet."
+          }
+          
+          Write-Host "Memory Info (SystemInfo):"
+          systeminfo | findstr /C:"Total Physical Memory" /C:"Available Physical Memory"
 
       - name: Install Dependencies
-        run: npm ci
-        if: steps.cache-node-modules.outputs.cache-hit != 'true'
-
-      - name: Build Frontend
+        shell: pwsh # 显式指定使用 PowerShell
         run: |
-          cd dd-vue
-          npm run build
-          cp -r dist/* ../dd-server/
+          Write-Host "Starting npm ci..."
+          
+          # PowerShell 查看内存 (单位 MB)
+          $mem = Get-CimInstance Win32_OperatingSystem
+          Write-Host "Free Physical Memory: $($mem.FreePhysicalMemory / 1MB) MB"
+          
+          # 执行 npm ci
+          # --loglevel verbose: 强制输出详细日志
+          # --progress=false: 防止进度条刷屏
+          npm ci --loglevel verbose --progress=false --prefer-offline
+          
+          Write-Host "Install finished successfully."
+        if: steps.cache-node-modules.outputs.cache-hit != 'true'
+        env:
+          NODE_OPTIONS: "--max-old-space-size=4096"
 
       # 2. 【关键】第二次激活环境 (用于 electron-builder 内部的子进程)
       # 这一步非常重要，因为 electron-builder 会 spawn 新进程
