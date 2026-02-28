@@ -1,4 +1,4 @@
-name: Build Windows EXE (Final Attempt 5)
+name: Build Windows EXE (Cache Attempt)
 
 on:
   workflow_dispatch: # 只保留手动触发
@@ -22,14 +22,23 @@ jobs:
         with:
           arch: x64
 
+      - name: Cache Node Modules
+        id: cache-node-modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            **/node_modules
+            ~/.npm
+            # 如果有全局安装的 electron-builder 等，也可以缓存
+            ~/.cache/electron
+            ~/.cache/electron-builder
+          key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-
+
       - name: Install Dependencies
-        run: |
-          cd dd-server
-          npm config set registry https://registry.npmmirror.com
-          npm install
-          cd ../dd-vue
-          npm config set registry https://registry.npmmirror.com
-          npm install
+        run: npm ci
+        if: steps.cache-node-modules.outputs.cache-hit != 'true'
 
       - name: Build Frontend
         run: |
