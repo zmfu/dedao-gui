@@ -2,6 +2,8 @@ name: Build Windows EXE (Cache Attempt)
 
 on:
   workflow_dispatch: # 只保留手动触发
+  push:              # 👈 临时加上这个
+    branches: [ "cache" ] # 👈 指定 cache 分支
 
 jobs:
   build:
