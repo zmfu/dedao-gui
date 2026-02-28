@@ -51,12 +51,25 @@ jobs:
           $mem = Get-CimInstance Win32_OperatingSystem
           Write-Host "Free Physical Memory: $($mem.FreePhysicalMemory / 1MB) MB"
           
-          # 执行 npm ci
-          # --loglevel verbose: 强制输出详细日志
-          # --progress=false: 防止进度条刷屏
-          npm ci --loglevel verbose --progress=false --prefer-offline
+          # --- 修改开始：分别进入子目录执行 ---
           
-          Write-Host "Install finished successfully."
+          # 1. 处理 dd-server
+          Write-Host "👉 Installing dependencies for dd-server..."
+          Set-Location dd-server
+          npm config set registry https://registry.npmmirror.com
+          npm ci --loglevel verbose --progress=false --prefer-offline
+          Set-Location .. # 返回根目录
+          
+          # 2. 处理 dd-vue
+          Write-Host "👉 Installing dependencies for dd-vue..."
+          Set-Location dd-vue
+          npm config set registry https://registry.npmmirror.com
+          npm ci --loglevel verbose --progress=false --prefer-offline
+          Set-Location .. # 返回根目录
+          
+          # --- 修改结束 ---
+          
+          Write-Host "✅ All dependencies installed successfully."
         if: steps.cache-node-modules.outputs.cache-hit != 'true'
         env:
           NODE_OPTIONS: "--max-old-space-size=4096"
