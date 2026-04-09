@@ -54,6 +54,7 @@ const htmlEscaper = require('html-escaper');
     let lastH = '';
     let lastNewLine = false;
     let lastName = '';
+    let lastXValue = ''; // 跟踪上一个text元素的X坐标
 
     for (let i = 0; i < element.children.length; i++) {
       const root = element.children[i];
@@ -128,18 +129,55 @@ const htmlEscaper = require('html-escaper');
               const lenInt = parseFloat(attr.len);
               const lastTopInt = parseFloat(lastTop);
               const lastHInt = parseFloat(lastH);
+              const xInt = parseFloat(attr.x);
+              const lastX = parseFloat(ele.X); // 当前元素的X将在后面设置，这里用临时变量
 
-              if (!lastNewLine && heightInt < lastHInt && heightInt <= 20 && lenInt < 3 && children.tagName === lastName) {
-                if (topInt < lastTopInt) {
-                  ele.IsFn = true;
-                } else {
-                  ele.IsSub = true;
+              // 改进的上标/下标检测逻辑
+              // 条件1：原始条件（小高度、短字符、同类型）
+              const originalCondition = !lastNewLine && heightInt < lastHInt && heightInt <= 20 && lenInt < 3 && children.tagName === lastName;
+              
+              // 条件2：组合字符检测（如 H̄ 的上横线）
+              // 特点：Y坐标明显不同，但X坐标接近，字符长度很短
+              const isCombiningChar = lenInt <= 1 && children.tagName === lastName && !lastNewLine;
+              
+              // 条件3：下标/上标数字检测（如 A₁ 的 ₁）
+              // 特点：高度较小，Y坐标偏移，X坐标连续
+              const isSubSupScript = heightInt <= 25 && lenInt <= 2 && children.tagName === lastName && !lastNewLine;
+
+              if (originalCondition || isCombiningChar || isSubSupScript) {
+                // 额外检查：X坐标应该接近（水平连续）
+                // 注意：这里用 attr.x 和 lastX 比较，但 lastX 还没设置
+                // 改用全局变量跟踪上一个元素的X
+                const prevX = parseFloat(lastXValue || 0);
+                const xDiff = Math.abs(xInt - prevX);
+                
+                // 如果X坐标差距太大（超过100像素），可能不是同一行的字符
+                if (xDiff < 200 || originalCondition) {
+                  if (topInt < lastTopInt - 2) {
+                    ele.IsFn = true;
+                  } else if (topInt > lastTopInt + 2) {
+                    ele.IsSub = true;
+                  } else if (isCombiningChar && heightInt < lastHInt) {
+                    // Y坐标接近但高度不同，可能是组合字符的上部分
+                    ele.IsFn = true;
+                  }
+                  
+                  if (ele.IsFn || ele.IsSub) {
+                    attr.style = '';
+                  }
                 }
-                attr.style = '';
-              } else {
+              }
+              
+              // 更新跟踪变量
+              if (!ele.IsFn && !ele.IsSub) {
                 lastTop = attr.top;
                 lastH = attr.height;
               }
+            }
+            
+            // 跟踪上一个text元素的X坐标
+            if (children.tagName === 'text') {
+              lastXValue = attr.x;
             }
           } else {
             ele.Content = '';
@@ -378,12 +416,29 @@ const htmlEscaper = require('html-escaper');
           let matchH = false;
           let level = 0;
           contWOTag = htmlEscaper.unescape(contWOTag).replace(/&nbsp;/g, '');
+          const contWOTagClean = contWOTag.replace(/ /g, '');
 
           toc.forEach(({ text, level: l }) => {
-            const contWOTagMatch = contWOTag.replace(/&nbsp;/g, '');
-            if (contWOTagMatch.replace(/ /g, '').includes(text)) {
-              matchH = true;
-              level = l;
+            const textClean = text.replace(/ /g, '');
+            // 改进的标题匹配逻辑
+            // 条件1：完全相等
+            const exactMatch = contWOTagClean === textClean;
+            // 条件2：文本包含标题，且长度接近（避免长段落包含短标题）
+            const lengthRatio = contWOTagClean.length / textClean.length;
+            const partialMatch = contWOTagClean.includes(textClean) && lengthRatio <= 1.5;
+            // 条件3：标题包含文本（反向检查）
+            const reverseMatch = textClean.includes(contWOTagClean) && contWOTagClean.length >= textClean.length * 0.8;
+            
+            if (exactMatch || partialMatch || reverseMatch) {
+              // 额外检查：标题行通常有特定样式（粗体）或较短的字符数
+              const isBold = items.some(item => item.IsBold);
+              const isShortLine = contWOTagClean.length <= textClean.length * 1.5 + 5;
+              
+              // 只有当行较短或者是粗体时，才认为是标题
+              if (isShortLine || isBold || exactMatch) {
+                matchH = true;
+                level = l;
+              }
             }
           });
 
